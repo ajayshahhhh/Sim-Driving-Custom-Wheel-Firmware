@@ -93,6 +93,15 @@ int main(void)
   MX_USART2_UART_Init();
   MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 2 */
+  GPIO_TypeDef* rowPorts[3] = {GPIOB, GPIOC, GPIOC};
+  uint16_t rowPins[3] = {GPIO_PIN_0, GPIO_PIN_1, GPIO_PIN_0};
+
+  GPIO_TypeDef* colPorts[4] = {GPIOB, GPIOB, GPIOB, GPIOB};
+  uint16_t colPins[4] = {GPIO_PIN_1, GPIO_PIN_15, GPIO_PIN_14, GPIO_PIN_13};
+
+  //TEMP DEBUGGING CODE
+//  // Test: drive row 1 high permanently
+//  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_0, GPIO_PIN_SET);
 
   /* USER CODE END 2 */
 
@@ -103,19 +112,57 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  // first two bytes are
 	  uint8_t report[4] = {0x00, 0x00, 0x00, 0x00};
 
-	  if (HAL_GPIO_ReadPin(GPIOC, GPIO_PIN_4) == GPIO_PIN_SET)
-	  {
-	      report[0] = 0x01;  // button 1 pressed
-	  }
-	  else
-	  {
-	      report[0] = 0x00;  // button 1 not pressed
+
+
+	  for(int i = 0; i < 3; i++){
+		  HAL_GPIO_WritePin(rowPorts[i], rowPins[i], GPIO_PIN_SET);
+		  for (int j = 0; j < 4; j++){
+			  if(HAL_GPIO_ReadPin(colPorts[j], colPins[j]) == GPIO_PIN_SET){
+				  uint8_t num = i * 4 + j;
+				  /* Button Matrix View:
+				  *    0  1  2  3
+				  * 0  0  1  2  3
+				  * 1  4  5  6  7
+				  * 2  8  9  10 11
+				  *
+				  * To calculate what button ur at, you can do:
+				  * (rowNum + 1) * 4 - (4 - colNum)
+				  * 4rowNum + 4 - 4 + colNum
+				  * 4rowNum + colNum
+				  *
+				  * Eg, for button 9, which is at row =  2, col = 1, you can do 4*2 + 1 = 9
+				  * button 7, which is at row = 1, col = 3, you can do 1*4 + 3 = 7
+				  */
+				  report[num/8] |= 0x01 << num % 8;
+				  /*
+				   * num/8 decides which byte to put in, first byte (0-7 buttons) or second byte (8-11 buttons)
+				   * 0x01 << num % 8 shifts the 1 over to the right bit position for that button
+				   * |= makes it a bitmask that leaves the other bits untouched
+				   */
+
+			  }
+		  }
+		  HAL_GPIO_WritePin(rowPorts[i], rowPins[i], GPIO_PIN_RESET);
 	  }
 
 	  USBD_HID_SendReport(&hUsbDeviceFS, report, 4);
 	  HAL_Delay(10);
+
+//	  uint8_t report[4] = {0x00, 0x00, 0x00, 0x00};
+//
+//	  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_15) == GPIO_PIN_SET) report[0] |= 0x02;
+//	  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_14) == GPIO_PIN_SET) report[0] |= 0x04;
+//	  if (HAL_GPIO_ReadPin(GPIOB, GPIO_PIN_13) == GPIO_PIN_SET) report[0] |= 0x08;
+//
+//	  USBD_HID_SendReport(&hUsbDeviceFS, report, 4);
+//	  HAL_Delay(10);
+
+
+
+
   }
   /* USER CODE END 3 */
 }
@@ -217,13 +264,26 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOC, Row_3_Pin|Row_2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Row_1_GPIO_Port, Row_1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : B1_Pin */
   GPIO_InitStruct.Pin = B1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_IT_FALLING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(B1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Row_3_Pin Row_2_Pin */
+  GPIO_InitStruct.Pin = Row_3_Pin|Row_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pin : LD2_Pin */
   GPIO_InitStruct.Pin = LD2_Pin;
@@ -232,11 +292,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(LD2_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Button_Test_GPIO_Input_Pin */
-  GPIO_InitStruct.Pin = Button_Test_GPIO_Input_Pin;
+  /*Configure GPIO pin : Row_1_Pin */
+  GPIO_InitStruct.Pin = Row_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(Row_1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Column_1_Pin Column_3_Pin Column_3B14_Pin Column_2_Pin */
+  GPIO_InitStruct.Pin = Column_1_Pin|Column_3_Pin|Column_3B14_Pin|Column_2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  HAL_GPIO_Init(Button_Test_GPIO_Input_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
